@@ -1,7 +1,20 @@
 # Guia rápido — `agentic-harness`
 
-Guia prático para compilar, subir o modelo e usar o agente no dia a dia.
-Todos os exemplos assumem que você está na raiz do repositório.
+Guia prático para instalar, subir o modelo e usar o agente no dia a dia.
+
+**Repositório:** <https://github.com/guilhermeteixeirasilva2004/agentic-harness>
+
+## Uso em 30 segundos
+
+```bash
+git clone https://github.com/guilhermeteixeirasilva2004/agentic-harness.git
+cd agentic-harness
+./install.sh     # compila o harness e instala o comando `nexus`
+nexus            # abre o agente (sobe o servidor do modelo se preciso)
+```
+
+Precisa de Go 1.22+, do `llama.cpp` e de um modelo GGUF — veja a seção 1.
+Os exemplos abaixo assumem que você está na raiz do repositório.
 
 ## 1. Pré-requisitos
 
@@ -15,8 +28,13 @@ compatível com a API da OpenAI (`llama-server`).
 ## 2. Instalar (uma vez)
 
 ```bash
+git clone https://github.com/guilhermeteixeirasilva2004/agentic-harness.git
+cd agentic-harness
 ./install.sh          # compila e instala o comando `nexus` no PATH
 ```
+
+Se você já tem o código em mãos, basta rodar o `./install.sh` na raiz do
+repositório: ele compila a partir da própria pasta e não mexe no seu Go global.
 
 Depois disso, **abra um terminal novo** e use só `nexus`.
 
@@ -28,6 +46,8 @@ go build -o harness .
 ```
 
 Recompile (ou rode `./install.sh` de novo) sempre que alterar o código Go.
+Depois de um `git pull`, rode `./install.sh` outra vez para reinstalar o `nexus`
+já com as novidades.
 
 ## 3. Servidor do modelo (automático)
 
