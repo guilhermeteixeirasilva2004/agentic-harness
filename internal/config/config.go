@@ -40,6 +40,9 @@ type Config struct {
 	// (0 desativa) e Backoff é a espera inicial, que dobra a cada tentativa.
 	Retries int
 	Backoff time.Duration
+	// AllowInsecureHTTP permite usar http:// com host remoto (o tráfego do
+	// prompt e das respostas vai em claro). Sem ela, só loopback é aceito.
+	AllowInsecureHTTP bool
 
 	// Segurança de tools mutantes (subcomando "agent").
 	// Approve é o modo de aprovação: ask (padrão), auto ou deny.
@@ -66,6 +69,7 @@ func Load(args []string) *Config {
 
 	fs := flag.NewFlagSet("agentic-harness", flag.ExitOnError)
 	fs.StringVar(&baseURL, "url", baseURL, "base URL do servidor compatível com OpenAI")
+	allowInsecureHTTP := fs.Bool("allow-insecure-http", envBool("HARNESS_ALLOW_INSECURE_HTTP", false), "permite http:// para host remoto (tráfego em claro)")
 	fs.StringVar(&model, "model", model, "nome do modelo enviado na requisição")
 	fs.StringVar(&system, "system", system, "system prompt inicial")
 	fs.Float64Var(&temp, "temp", temp, "temperatura de amostragem")
@@ -117,28 +121,29 @@ func Load(args []string) *Config {
 	}
 
 	return &Config{
-		BaseURL:          baseURL,
-		Model:            model,
-		System:           system,
-		Temperature:      temp,
-		MaxTokens:        *maxTokens,
-		Stream:           *stream,
-		Verbose:          *verbose,
-		MaxSteps:         maxSteps,
-		Strategy:         strategy,
-		MaxContextTokens: maxContext,
-		AllowTools:       splitCSV(allowStr),
-		EmbedModel:       embedModel,
-		RAG:              rag,
-		TopK:             topK,
-		Retries:          retries,
-		Backoff:          backoff,
-		StorePath:        storePath,
-		Session:          session,
-		Resume:           resume,
-		Continue:         continuar,
-		Approve:          NormalizeApprove(approve),
-		ShellAllow:       splitCSV(shellAllowStr),
+		BaseURL:           baseURL,
+		Model:             model,
+		System:            system,
+		Temperature:       temp,
+		MaxTokens:         *maxTokens,
+		Stream:            *stream,
+		Verbose:           *verbose,
+		MaxSteps:          maxSteps,
+		Strategy:          strategy,
+		MaxContextTokens:  maxContext,
+		AllowTools:        splitCSV(allowStr),
+		EmbedModel:        embedModel,
+		RAG:               rag,
+		TopK:              topK,
+		Retries:           retries,
+		Backoff:           backoff,
+		AllowInsecureHTTP: *allowInsecureHTTP,
+		StorePath:         storePath,
+		Session:           session,
+		Resume:            resume,
+		Continue:          continuar,
+		Approve:           NormalizeApprove(approve),
+		ShellAllow:        splitCSV(shellAllowStr),
 	}
 }
 

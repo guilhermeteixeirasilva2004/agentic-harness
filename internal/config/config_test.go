@@ -5,6 +5,22 @@ import (
 	"time"
 )
 
+func TestLoadAllowInsecureHTTP(t *testing.T) {
+	t.Setenv("HARNESS_ALLOW_INSECURE_HTTP", "")
+
+	if cfg := Load(nil); cfg.AllowInsecureHTTP {
+		t.Fatal("padrão deveria recusar http:// remoto")
+	}
+	if cfg := Load([]string{"-allow-insecure-http"}); !cfg.AllowInsecureHTTP {
+		t.Fatal("-allow-insecure-http não foi aplicado")
+	}
+
+	t.Setenv("HARNESS_ALLOW_INSECURE_HTTP", "true")
+	if cfg := Load(nil); !cfg.AllowInsecureHTTP {
+		t.Fatal("HARNESS_ALLOW_INSECURE_HTTP=true deveria ligar a opção")
+	}
+}
+
 func TestLoadRAGTopKRetriesPeloEnv(t *testing.T) {
 	t.Setenv("HARNESS_RAG", "true")
 	t.Setenv("HARNESS_TOPK", "3")

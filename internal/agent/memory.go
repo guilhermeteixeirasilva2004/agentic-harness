@@ -10,6 +10,7 @@ import (
 
 	"agentic-harness/internal/llm"
 	"agentic-harness/internal/store"
+	"agentic-harness/internal/textutil"
 )
 
 // Memória de longo prazo do agente, em duas camadas:
@@ -232,7 +233,7 @@ func (a *Agent) Remember(note string) error {
 		return fmt.Errorf("nota vazia")
 	}
 	if len(note) > maxNoteChars {
-		note = note[:maxNoteChars] + "…"
+		note = textutil.TruncateRunes(note, maxNoteChars)
 	}
 	a.notes = append(a.notes, note)
 	if len(a.notes) > maxMemoryNotes {

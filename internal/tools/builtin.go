@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"agentic-harness/internal/textutil"
 )
 
 // GetTime devolve a data e a hora atuais no fuso local.
@@ -86,9 +88,9 @@ func (t ReadFile) Run(_ context.Context, raw json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out := string(data)
+	out := textutil.CutBytesUTF8(string(data), limit)
 	if len(data) > limit {
-		out = string(data[:limit]) + fmt.Sprintf("\n[... truncado em %d bytes]", limit)
+		out += fmt.Sprintf("\n[... truncado em %d bytes]", limit)
 	}
 	return out, nil
 }

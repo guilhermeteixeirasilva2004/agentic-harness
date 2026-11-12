@@ -5,6 +5,13 @@ on:
     branches: [main, master]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   go:
     runs-on: ubuntu-latest
@@ -31,5 +38,24 @@ jobs:
       - name: go build
         run: go build ./...
 
-      - name: go test
-        run: go test ./... -count=1
+      # T-01: os testes rodam com o detector de corrida e geram cobertura, para
+      # que concorrência quebrada e quedas de cobertura apareçam no CI.
+      - name: go test (race + cobertura)
+        run: go test ./... -count=1 -race -covermode=atomic -coverprofile=coverage.out
+
+      - name: piso de cobertura
+        run: |
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "cobertura total: ${total}%"
+          # Piso conservador: sobe junto com a refatoração (meta: 80% no código novo).
+          awk -v t="$total" 'BEGIN { if (t + 0 < 65) { print "cobertura abaixo do piso de 65%" > "/dev/stderr"; exit 1 } }'
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.61.0
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.3
+          "$(go env GOPATH)/bin/govulncheck" ./...

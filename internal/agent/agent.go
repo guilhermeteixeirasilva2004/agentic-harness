@@ -21,6 +21,7 @@ import (
 	"agentic-harness/internal/reasoning"
 	"agentic-harness/internal/safety"
 	"agentic-harness/internal/store"
+	"agentic-harness/internal/textutil"
 	"agentic-harness/internal/tools"
 )
 
@@ -421,10 +422,7 @@ func (a *Agent) logf(format string, args ...any) {
 
 func truncateForLog(s string, n int) string {
 	s = strings.ReplaceAll(s, "\n", " ")
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
+	return textutil.TruncateRunes(s, n)
 }
 
 // Turn executa uma rodada do loop agêntico, registrando métricas e persistindo

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"agentic-harness/internal/textutil"
 )
 
 // ErrNotAllowed indica que a tool não está na allowlist.
@@ -125,10 +127,7 @@ func stripFences(s string) string {
 }
 
 func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
+	return textutil.TruncateRunes(s, n)
 }
 
 // Registry agrupa tools e aplica a allowlist antes de executar.

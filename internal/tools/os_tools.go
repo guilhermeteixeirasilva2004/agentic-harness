@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"agentic-harness/internal/textutil"
 )
 
 // WriteFile cria ou sobrescreve um arquivo de texto dentro da raiz permitida.
@@ -470,7 +472,9 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	if len(p) > room {
-		b.buf.Write(p[:room])
+		// O corte é por byte: recua até a fronteira de runa para não gravar
+		// UTF-8 inválido no meio de um caractere acentuado.
+		b.buf.WriteString(textutil.CutBytesUTF8(string(p), room))
 		b.truncated = true
 		return len(p), nil
 	}

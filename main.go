@@ -28,9 +28,15 @@ func main() {
 		return
 	case "", "chat":
 		cfg := config.Load(args)
+		if !checkBaseURL(cfg) {
+			os.Exit(2)
+		}
 		ui.New(cfg, ui.NewChat(cfg, llm.NewClient(cfg.BaseURL))).Run(ctx)
 	case "agent":
 		cfg := config.Load(args)
+		if !checkBaseURL(cfg) {
+			os.Exit(2)
+		}
 		a := agent.NewDefault(cfg)
 		a.SetSession(cfg.Session)
 		if cfg.StorePath != "" {
@@ -70,6 +76,16 @@ func main() {
 	}
 }
 
+// checkBaseURL recusa http:// para host remoto sem -allow-insecure-http: o
+// prompt e o conteúdo dos arquivos trafegariam em claro (S-11).
+func checkBaseURL(cfg *config.Config) bool {
+	if err := llm.ValidateBaseURL(cfg.BaseURL, cfg.AllowInsecureHTTP); err != nil {
+		fmt.Fprintf(os.Stderr, "[erro] %v\n", err)
+		return false
+	}
+	return true
+}
+
 // splitSubcommand separa o subcomando dos demais argumentos. Um primeiro
 // argumento que começa com "-" é tratado como flag, logo o subcomando é "chat".
 func splitSubcommand(args []string) (string, []string) {
@@ -91,6 +107,7 @@ func usage() {
 	fmt.Println()
 	fmt.Println("flags principais:")
 	fmt.Println("  -url, -model, -system, -temp, -maxtokens, -stream")
+	fmt.Println("  -allow-insecure-http             (aceita http:// para host remoto)")
 	fmt.Println("  -maxsteps, -allow, -embedmodel   (controle do agente)")
 	fmt.Println("  -rag, -topk                      (RAG leve nas notas de memória)")
 	fmt.Println("  -retries, -backoff               (retentativas com backoff exponencial)")
@@ -104,5 +121,5 @@ func usage() {
 	fmt.Println("           HARNESS_RAG, HARNESS_TOPK, HARNESS_RETRIES, HARNESS_BACKOFF,")
 	fmt.Println("           HARNESS_STRATEGY, HARNESS_MAXCONTEXT,")
 	fmt.Println("           HARNESS_STORE, HARNESS_SESSION, HARNESS_RESUME, HARNESS_CONTINUE,")
-	fmt.Println("           HARNESS_APPROVE, HARNESS_SHELLALLOW")
+	fmt.Println("           HARNESS_APPROVE, HARNESS_SHELLALLOW, HARNESS_ALLOW_INSECURE_HTTP")
 }

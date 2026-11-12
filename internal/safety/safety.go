@@ -3,7 +3,12 @@
 // padrão nega toda tool que não esteja explicitamente liberada.
 package safety
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	"agentic-harness/internal/textutil"
+)
 
 // Policy define os limites aplicados a cada rodada do agente.
 type Policy struct {
@@ -25,7 +30,7 @@ func New(maxSteps int, allow []string) *Policy {
 		Allow:          make(map[string]bool, len(allow)),
 	}
 	for _, n := range allow {
-		if n != "" {
+		if n = strings.TrimSpace(n); n != "" {
 			p.Allow[n] = true
 		}
 	}
@@ -51,12 +56,19 @@ func (p *Policy) CheckTool(name string) error {
 	return nil
 }
 
-// TruncateOutput limita a resposta final.
+// TruncateOutput limita a resposta final ao teto de bytes. O corte respeita
+// UTF-8 e o aviso de truncamento cabe dentro do teto: o texto devolvido nunca
+// passa de MaxOutputBytes (exceto quando o teto é menor que o próprio aviso).
 func (p *Policy) TruncateOutput(s string) string {
-	if len(s) <= p.MaxOutputBytes {
+	const notice = "\n[... resposta truncada pela política]"
+	if p.MaxOutputBytes <= 0 || len(s) <= p.MaxOutputBytes {
 		return s
 	}
-	return s[:p.MaxOutputBytes] + "\n[... resposta truncada pela política]"
+	limit := p.MaxOutputBytes - len(notice)
+	if limit <= 0 {
+		return textutil.CutBytesUTF8(s, p.MaxOutputBytes)
+	}
+	return textutil.CutBytesUTF8(s, limit) + notice
 }
 
 // StepsOK informa se ainda há orçamento de passos.
