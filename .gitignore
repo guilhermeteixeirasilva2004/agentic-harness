@@ -1,0 +1,8 @@
+# binário compilado
+/harness
+
+# modelos GGUF (baixados separadamente)
+*.gguf
+
+# arquivos de ambiente
+.env
