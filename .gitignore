@@ -6,3 +6,7 @@
 
 # arquivos de ambiente
 .env
+
+# artefatos do CI (cobertura e relatório do govulncheck)
+coverage.out
+vuln.json
