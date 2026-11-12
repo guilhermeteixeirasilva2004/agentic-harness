@@ -236,7 +236,8 @@ Regra: `domain` não importa nada interno; `ports` importa só `domain`; `app` i
 ## 4. Testes
 
 - **T-01 🟠** CI sem `-race`, `golangci-lint`, `govulncheck` e cobertura. Adicionar `go test -race -cover ./...`, `golangci-lint run`, `govulncheck ./...`.
-  - [x] concluído — `.github/workflows/ci.yml` com gofmt, vet, build, `go test -race` + cobertura (piso de 65%, total atual 74,7%), golangci-lint v1.61.0 e govulncheck; `internal/testutil` (FakeLLM, FakeRepository, Clock, Approver, Asker) para os testes.
+  - [x] concluído — `.github/workflows/ci.yml` com gofmt, vet, build, `go test -race` + cobertura (piso de 65%, total atual 74,8%), golangci-lint v1.61.0 e govulncheck; `internal/testutil` (FakeLLM, FakeRepository, Clock, Approver, Asker) para os testes.
+  - **Nota govulncheck:** o toolchain segue pinado em Go 1.22 (`go.mod`), então a stdlib acumula CVEs já corrigidos em versões novas do Go (78 achados, todos `stdlib`). O passo separa os achados: `stdlib` sai como aviso, dependência de terceiro **falha** o build. O conserto de verdade (subir o Go para 1.26+) é uma decisão à parte, porque muda o toolchain mínimo de quem compila.
 - **T-02 🟠** Testes de segurança dedicados: *path traversal*, symlink, injeção em argv, `CheckCommand`, `remember` envenenado, aprovação em `auto` após observação não confiável.
 - **T-03 🟡** *Fuzz* (`go test -fuzz`) para `ExtractObject`, `ParseCall`, `stripFences`, `resolveWithin`, `ParseArgv`, `parseDecision`.
 - **T-04 🟡** Testes acoplados a campos privados (`a.history`, `a.notes`, `a.steps`) quebrarão na refatoração. Migrar para testes de **comportamento** via portas/eventos antes de quebrar o `Agent`.
