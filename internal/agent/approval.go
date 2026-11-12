@@ -39,11 +39,12 @@ func (a *Agent) approveTool(ctx context.Context, call tools.Call) bool {
 		return true
 	}
 	approved := false
+	summary := approvalSummary(call)
 	if a.approver != nil {
 		ok, err := a.approver.Approve(ctx, ApprovalRequest{
 			Tool:      name,
 			Arguments: call.Arguments,
-			Summary:   approvalSummary(call),
+			Summary:   summary,
 		})
 		if err != nil {
 			a.logf("aprovação (%s): erro %v", name, err)
@@ -56,36 +57,39 @@ func (a *Agent) approveTool(ctx context.Context, call tools.Call) bool {
 	} else {
 		a.meter.RecordDenial()
 	}
-	a.auditApproval(call, approved)
+	a.auditApproval(call, summary, approved)
 	return approved
 }
 
 // approvalRecord é o payload persistido no store para auditoria das decisões.
 type approvalRecord struct {
 	Tool      string          `json:"tool"`
+	Summary   string          `json:"summary,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	Approved  bool            `json:"approved"`
 }
 
-func (a *Agent) auditApproval(call tools.Call, approved bool) {
+func (a *Agent) auditApproval(call tools.Call, summary string, approved bool) {
 	if a.store == nil {
 		return
 	}
 	_ = a.store.Append("approval", a.session, approvalRecord{
 		Tool:      call.Tool,
+		Summary:   summary,
 		Arguments: call.Arguments,
 		Approved:  approved,
 	})
 }
 
-// approvalSummary monta "tool args" em uma linha para o prompt de aprovação.
+// approvalSummary descreve a chamada por inteiro (tool + argumentos completos):
+// o humano — e a auditoria — precisa ver exatamente o que será executado para
+// decidir. Só as quebras de linha viram espaço (para não bagunçar o terminal);
+// nenhum conteúdo é cortado.
 func approvalSummary(call tools.Call) string {
 	args := strings.TrimSpace(string(call.Arguments))
 	if args == "" || args == "null" {
 		return call.Tool
 	}
-	if len(args) > 300 {
-		args = args[:300] + "…"
-	}
+	args = strings.Join(strings.Split(args, "\n"), " ")
 	return fmt.Sprintf("%s %s", call.Tool, args)
 }

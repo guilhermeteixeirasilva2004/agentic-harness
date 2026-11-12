@@ -24,6 +24,13 @@ type Engine interface {
 	Clear()
 }
 
+// Resumer é o caso de uso de retomada (/continue) oferecido pelo motor.
+// O motor decide internamente entre restaurar um checkpoint salvo e aproveitar
+// o histórico já em memória; a UI não precisa saber qual dos dois ocorreu.
+type Resumer interface {
+	ResumeTask(ctx context.Context, onDelta func(string)) (string, error)
+}
+
 // REPL mantém a interface de terminal e delega as rodadas ao Engine.
 type REPL struct {
 	cfg       *config.Config
@@ -223,18 +230,14 @@ func (r *REPL) handleCommand(ctx context.Context, line string) bool {
 		}
 		fmt.Print("assistente> ")
 		onDelta := func(delta string) { fmt.Print(delta) }
-		var reply string
-		var err error
-		// Com checkpoint pendente (tarefa interrompida por -maxsteps), retoma o
-		// estado salvo; caso contrário, reaproveita o histórico em memória.
-		if cont, ok := r.eng.(interface {
-			Continue(context.Context, func(string)) (string, error)
-			HasCheckpoint() bool
-		}); ok && cont.HasCheckpoint() {
-			reply, err = cont.Continue(ctx, onDelta)
-		} else {
-			reply, err = r.eng.Reply(ctx, continuePrompt, onDelta)
+		// O caso de uso de retomada vive no núcleo (agent.ResumeTask): ele decide
+		// entre restaurar o checkpoint salvo e reaproveitar o histórico atual.
+		res, ok := r.eng.(Resumer)
+		if !ok {
+			fmt.Println("[continue indisponível neste motor]")
+			break
 		}
+		reply, err := res.ResumeTask(ctx, onDelta)
 		if err != nil {
 			fmt.Println()
 			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
@@ -286,11 +289,6 @@ func (r *REPL) handleCommand(ctx context.Context, line string) bool {
 	}
 	return false
 }
-
-// continuePrompt é a instrução enviada por /continue: o histórico (com as
-// observações já coletadas) é preservado, então o agente retoma de onde parou.
-const continuePrompt = "Continue a tarefa anterior de onde parou, sem repetir o que já foi feito. " +
-	"Use as observações já disponíveis no histórico e conclua com action \"final\" assim que possível."
 
 // commandAliases aceita atalhos em português para os comandos mais usados.
 var commandAliases = map[string]string{

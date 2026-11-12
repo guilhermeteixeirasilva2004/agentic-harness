@@ -161,6 +161,9 @@ func TestApprovalAuditaNoStore(t *testing.T) {
 		if rec.Tool != "write_file" || !rec.Approved {
 			t.Fatalf("registro de auditoria inesperado: %+v", rec)
 		}
+		if !strings.Contains(rec.Summary, "write_file") || !strings.Contains(rec.Summary, "a.txt") {
+			t.Fatalf("o resumo da ação deveria estar auditado: %+v", rec)
+		}
 		found = true
 	}
 	if !found {

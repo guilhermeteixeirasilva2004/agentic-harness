@@ -12,14 +12,24 @@ import (
 	"agentic-harness/internal/config"
 )
 
-// agentEngine imita o agente: aceita Approver/Asker (logo, agentMode = true).
+// agentEngine imita o agente: aceita Approver/Asker (logo, agentMode = true) e
+// expõe o caso de uso de retomada (ResumeTask).
 type agentEngine struct {
-	inputs []string
-	asker  agent.Asker
+	inputs  []string
+	resumes int
+	asker   agent.Asker
 }
 
 func (f *agentEngine) Reply(_ context.Context, input string, onDelta func(string)) (string, error) {
 	f.inputs = append(f.inputs, input)
+	if onDelta != nil {
+		onDelta("ok")
+	}
+	return "ok", nil
+}
+
+func (f *agentEngine) ResumeTask(_ context.Context, onDelta func(string)) (string, error) {
+	f.resumes++
 	if onDelta != nil {
 		onDelta("ok")
 	}
@@ -120,8 +130,8 @@ func TestREPLContinueRetomaTarefa(t *testing.T) {
 	if exit {
 		t.Fatal("/continue não deveria encerrar o REPL")
 	}
-	if len(eng.inputs) != 1 || eng.inputs[0] != continuePrompt {
-		t.Fatalf("entradas = %#v", eng.inputs)
+	if eng.resumes != 1 || len(eng.inputs) != 0 {
+		t.Fatalf("resumes = %d, entradas = %#v", eng.resumes, eng.inputs)
 	}
 }
 
@@ -155,8 +165,8 @@ func TestREPLApelidosEmPortugues(t *testing.T) {
 	if r2.handleCommand(context.Background(), "/continuar") {
 		t.Fatal("/continuar não deveria encerrar o REPL")
 	}
-	if len(eng.inputs) != 1 || eng.inputs[0] != continuePrompt {
-		t.Fatalf("entradas = %#v", eng.inputs)
+	if eng.resumes != 1 || len(eng.inputs) != 0 {
+		t.Fatalf("resumes = %d, entradas = %#v", eng.resumes, eng.inputs)
 	}
 
 	// /limpar e /ajuda respondem em português.
@@ -206,8 +216,8 @@ func TestREPLComandoSemBarra(t *testing.T) {
 	if out := captureStdout(t, func() { r.handleCommand(context.Background(), normalizeCommand("continuar")) }); !strings.Contains(out, "assistente>") {
 		t.Fatalf("\"continuar\" deveria disparar /continue: %q", out)
 	}
-	if len(eng.inputs) != 1 || eng.inputs[0] != continuePrompt {
-		t.Fatalf("entradas = %#v", eng.inputs)
+	if eng.resumes != 1 || len(eng.inputs) != 0 {
+		t.Fatalf("resumes = %d, entradas = %#v", eng.resumes, eng.inputs)
 	}
 
 	// Frase comum vai para o modelo, não vira comando.

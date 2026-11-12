@@ -7,6 +7,32 @@ import (
 	"testing"
 )
 
+func TestOpenRestringePermissoes(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sessoes")
+	path := filepath.Join(sub, "sessions.jsonl")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	info, err := os.Stat(sub)
+	if err != nil {
+		t.Fatalf("Stat diretório: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("permissões do diretório = %o, esperava 700", perm)
+	}
+	info, err = os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat arquivo: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("permissões do arquivo = %o, esperava 600", perm)
+	}
+}
+
 func TestAppendQuery(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sub", "sessions.jsonl")

@@ -505,9 +505,22 @@ func (a *Agent) turn(ctx context.Context, input string, onDelta func(string)) (s
 			call := tools.Call{Tool: d.Tool, Arguments: d.Arguments}
 			if len(call.Arguments) == 0 || string(call.Arguments) == "null" {
 				if a.policy.AllowTool(call.Tool) {
-					if filled, ferr := a.fillArgs(ctx, call.Tool, input); ferr == nil {
-						call.Arguments = filled
+					filled, ferr := a.fillArgs(ctx, call.Tool, input)
+					if ferr != nil {
+						if ctx.Err() != nil {
+							return "", ctx.Err()
+						}
+						// Sem argumentos a tool rodaria vazia e o erro real
+						// (permissão, schema, resposta inválida) se perderia:
+						// devolve a causa ao modelo e não executa nada.
+						msg := fmt.Sprintf("ERRO (args): não foi possível montar os argumentos de %s: %v", call.Tool, ferr)
+						a.record(cognition.Step{Kind: cognition.KindError, Action: d.Action, Tool: call.Tool, Observation: msg})
+						a.logf("%s", msg)
+						a.history = append(a.history, llm.Message{Role: llm.RoleAssistant, Content: raw})
+						a.history = append(a.history, llm.Message{Role: llm.RoleUser, Content: msg})
+						continue
 					}
+					call.Arguments = filled
 				}
 			}
 			a.record(cognition.Step{

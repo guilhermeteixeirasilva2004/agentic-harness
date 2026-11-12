@@ -122,6 +122,17 @@ func (a *Agent) Continue(ctx context.Context, onDelta func(string)) (string, err
 	return a.Turn(ctx, continuePrompt, onDelta)
 }
 
+// ResumeTask é o caso de uso de /continue: retoma a tarefa anterior. Com
+// checkpoint pendente (turno interrompido pelo limite de passos) restaura o
+// estado salvo; sem checkpoint, reaproveita o histórico em memória. A UI não
+// precisa conhecer o prompt nem saber que existe checkpoint.
+func (a *Agent) ResumeTask(ctx context.Context, onDelta func(string)) (string, error) {
+	if a.HasCheckpoint() {
+		return a.Continue(ctx, onDelta)
+	}
+	return a.Turn(ctx, continuePrompt, onDelta)
+}
+
 // restoreCheckpoint reconstrói o estado da tarefa a partir do checkpoint.
 func (a *Agent) restoreCheckpoint(cp checkpointRecord) {
 	if len(cp.History) > 0 {

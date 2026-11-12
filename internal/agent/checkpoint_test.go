@@ -119,6 +119,35 @@ func TestContinueRestauraEConclui(t *testing.T) {
 	}
 }
 
+// ResumeTask sem checkpoint pendente reaproveita o histórico em memória, sem
+// exigir que a UI conheça o prompt de retomada (B-10).
+func TestResumeTaskSemCheckpointUsaHistorico(t *testing.T) {
+	st := openTestStore(t)
+	f := &fakeLLM{responses: []string{`{"action":"final","answer":"continuei"}`}}
+	a := newTestAgent(f, 4)
+	a.SetStore(st)
+
+	out, err := a.ResumeTask(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ResumeTask: %v", err)
+	}
+	if out != "continuei" {
+		t.Fatalf("out = %q", out)
+	}
+	if len(f.requests) != 1 {
+		t.Fatalf("requisições = %d, esperava 1", len(f.requests))
+	}
+	found := false
+	for _, m := range f.requests[0].Messages {
+		if m.Content == continuePrompt {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("a instrução de retomada não foi enviada: %+v", f.requests[0].Messages)
+	}
+}
+
 func TestContinueSemStore(t *testing.T) {
 	a := newTestAgent(&fakeLLM{}, 4)
 	if _, err := a.Continue(context.Background(), nil); err == nil {
