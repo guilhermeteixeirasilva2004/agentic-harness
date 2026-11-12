@@ -38,11 +38,10 @@ func (a *Agent) complete(ctx context.Context, req llm.ChatRequest) (string, erro
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
 			a.meter.RecordRetry()
-			delay := wait
-			if d := retryAfter(lastErr); d > 0 {
-				// O servidor mandou esperar: respeita, em vez do backoff local.
-				delay = d
-			} else {
+			// Se o servidor mandou esperar (Retry-After), respeita; caso
+			// contrário usa o backoff local com jitter.
+			delay := retryAfter(lastErr)
+			if delay <= 0 {
 				delay = jittered(wait)
 			}
 			a.logf("retentativa %d/%d em %s (último erro: %v)", i+1, attempts, delay, lastErr)

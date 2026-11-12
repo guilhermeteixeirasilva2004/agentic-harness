@@ -140,6 +140,7 @@ SYSTEM="Você é Nexus, fale como pirata." nexus   # troca a persona
 | `-session` | identificador da sessão | gerado |
 | `-resume` | retoma a última sessão persistida | `false` |
 | `-continue` | retoma tarefa incompleta (checkpoint) | `false` |
+| `-allow-insecure-http` | aceita `-url` em `http://` para host remoto | `false` |
 
 Cada flag tem uma **variável de ambiente** equivalente (ex.: `HARNESS_ALLOW`,
 `HARNESS_TEMP`, `HARNESS_MAXSTEPS`, `HARNESS_URL`, `HARNESS_STORE`).
@@ -290,7 +291,9 @@ ainda estiver rodando.
 - **`run_shell` bloqueado**: o comando precisa começar com um prefixo de
   `-shellallow` e não pode ter metacaractere de shell.
 - **Sem resposta do modelo**: confirme que o `llama-server` está no ar em
-  `127.0.0.1:8080` (ou ajuste `-url`); o harness já tenta de novo em falhas
-  transitórias (`-retries`/`-backoff`).
-- **Rodar os testes do projeto**: `go test ./...` (não precisa de modelo).
+  `127.0.0.1:8080` (ou ajuste `-url`, que só aceita `http://` para loopback); o
+  harness já tenta de novo em falhas transitórias (`-retries`/`-backoff`).
+- **Rodar os testes do projeto**: `go test ./...` (não precisa de modelo). O CI
+  roda ainda `go test -race`, piso de cobertura de 65%, `golangci-lint` e
+  `govulncheck` — veja `.github/workflows/ci.yml`.
 

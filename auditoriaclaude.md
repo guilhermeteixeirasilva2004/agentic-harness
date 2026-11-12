@@ -66,7 +66,7 @@ Severidade: 🔴 crítica · 🟠 alta · 🟡 média · 🟢 baixa.
 - **Onde:** `internal/agent/approval.go` (`approvalSummary`, corte em 300 bytes).
 - **Problema:** o humano aprova `write_file` sem ver o conteúdo inteiro/final (e o corte quebra UTF-8, ver B-01).
 - **Correção:** mostrar resumo **e** permitir ver o completo (`d` para detalhes); para `write_file`/`edit_file`, mostrar diff; para `run_shell`, mostrar `argv` parseado; nunca aprovar sem exibir o que será executado integralmente.
-- [ ] concluído
+- [x] concluído — `approvalSummary` exibe a chamada inteira (sem corte, só achata quebras de linha) e o resumo completo passa a ser auditado no store (`approvalRecord.Summary`); testes `TestApprovalSummaryNaoTrunca` e `TestApprovalAuditaNoStore`. Diff/`argv` renderizados ficam para S-01/S-02, quando houver `argv` de verdade.
 
 ### S-06 🟡 `-approve auto` sem salvaguardas
 - **Problema:** aprova tudo, inclusive `delete_file recursive` e `run_shell`.
@@ -88,7 +88,7 @@ Severidade: 🔴 crítica · 🟠 alta · 🟡 média · 🟢 baixa.
 ### S-09 🟡 Store e arquivos com permissões amplas
 - **Onde:** `internal/store/store.go` (`0o644`, diretórios `0o755`), `write_file`.
 - **Correção:** store `0o600`, diretório `0o700`; avisar que histórico pode conter segredos; opção de redação (`redact`) de padrões comuns (chaves, tokens) antes de persistir.
-- [ ] concluído
+- [x] concluído (permissões) — `store.Open` cria diretório `0o700` e arquivo `0o600` (`TestOpenRestringePermissoes`). Redação de segredos antes de persistir segue pendente (depende de S-04/revisão de memória).
 
 ### S-10 🟡 Jobs em segundo plano sem controle de processo
 - **Onde:** `internal/tools/jobs.go`.
@@ -99,7 +99,7 @@ Severidade: 🔴 crítica · 🟠 alta · 🟡 média · 🟢 baixa.
 ### S-11 🟢 Cliente HTTP para o LLM
 - **Onde:** `internal/llm/client.go` (`&http.Client{}` sem timeouts).
 - **Correção:** ver B-07; além disso, avisar/recusar `http://` remoto não-loopback sem flag explícita.
-- [ ] concluído
+- [x] concluído — `llm.ValidateBaseURL` recusa `http://` para host não-loopback; escape explícito via `-allow-insecure-http` / `HARNESS_ALLOW_INSECURE_HTTP` (`checkBaseURL` no `main`, testes `TestValidateBaseURL` e `TestLoadAllowInsecureHTTP`).
 
 ---
 
@@ -108,19 +108,19 @@ Severidade: 🔴 crítica · 🟠 alta · 🟡 média · 🟢 baixa.
 ### B-01 🟠 Truncamento por byte quebra UTF-8
 - **Onde:** `truncateForLog` (`agent.go`), `Remember` (`memory.go`), `approvalSummary`, `truncate`/`firstLine` (`tools.go`, `os_tools.go`), `safety.TruncateOutput`, `ReadFile` (`string(data[:limit])`), `limitedBuffer`.
 - **Correção:** criar `internal/textutil` com `TruncateRunes(s, n)` e `TruncateBytesUTF8(s, maxBytes)` (recua até limite de rune válido) e usar em todos. Teste com `"ação"`, emojis e cortes no meio de rune.
-- [ ] concluído
+- [x] concluído — `internal/textutil` (`TruncateRunes`, `CutBytesUTF8`, `TruncateBytesUTF8`, `Ellipsis`) usado em `agent`, `memory`, `tools`, `os_tools`, `safety`; testes com acentos, emoji e corte no meio de rune (`internal/tools/utf8_test.go`).
 
 ### B-02 🟠 `retryable` repete qualquer erro
 - **Onde:** `internal/agent/retry.go`.
 - **Problema:** repete 4xx, erro de decode, `resposta sem escolhas`. Só rede/timeout/5xx/429 deveriam repetir.
 - **Correção:** o cliente devolve erro tipado (`*llm.HTTPError{Status}`, `llm.ErrTransport`); `retryable` usa `errors.As`. Adicionar *jitter* no backoff e respeitar `Retry-After`.
-- [ ] concluído
+- [x] concluído — `internal/llm/errors.go` (`ErrTransport`, `ErrProtocol`, `HTTPError`, `Retryable`, `ParseRetryAfter`); `agent/retry.go` repete só `ErrTransport` e HTTP 408/429/5xx (exceto 501), com jitter e teto de 30s no `Retry-After`; testes em `llm/errors_test.go` e `agent/retry_test.go`.
 
 ### B-03 🟡 Falha em `fillArgs` é ignorada
 - **Onde:** `agent.go` (`turn`, ramo `tool`).
 - **Problema:** `ferr` é descartado; a tool roda com argumentos vazios e o erro aparece de forma confusa.
 - **Correção:** registrar no trace e realimentar `ERRO (args)` ao modelo.
-- [ ] concluído
+- [x] concluído — a tool não é executada; o trace recebe `KindError` com `ERRO (args)` e o modelo recebe a causa real (teste `TestFillArgsFalhaNaoExecutaTool`).
 
 ### B-04 🟡 `Resume` perde observações
 - **Onde:** `agent.go` (`Resume` restaura só `input`/`output`).
@@ -140,7 +140,7 @@ Severidade: 🔴 crítica · 🟠 alta · 🟡 média · 🟢 baixa.
 ### B-07 🟡 Cliente HTTP sem timeouts
 - **Onde:** `llm/client.go`.
 - **Correção:** `Transport` com `DialContext`/`ResponseHeaderTimeout`; timeout por requisição via `context`; streaming com *idle timeout*.
-- [ ] concluído
+- [x] concluído — `Transport` com `DialContext`/`TLSHandshakeTimeout`/`ResponseHeaderTimeout`, timeouts globais por requisição e *watchdog* de 60s no stream (`TestChatDerrubaStreamTravado`).
 
 ### B-08 🟡 `ask_user` sob timeout de 10 s e sem respeitar `ctx`
 - **Onde:** `Registry.Dispatch` (timeout fixo), `ui.REPL.Ask` (`Scan` bloqueante).
@@ -154,7 +154,7 @@ Severidade: 🔴 crítica · 🟠 alta · 🟡 média · 🟢 baixa.
 
 ### B-10 🟢 `continuePrompt` duplicado
 - **Onde:** `ui/repl.go` e `agent/checkpoint.go`. Centralizar no núcleo (caso de uso `Continue`).
-- [ ] concluído
+- [x] concluído — caso de uso `agent.ResumeTask` (checkpoint pendente **ou** histórico em memória) exposto pela porta `ui.Resumer`; o prompt ficou só no núcleo.
 
 ### B-11 🟢 `a.history` compartilhado com `ChatRequest.Messages`
 - **Problema:** `refreshMemory`/`setPlan` reutilizam o *backing array* (`a.history[:0]`) enquanto requisições guardam o mesmo slice (afeta testes e futuras goroutines).
@@ -236,6 +236,7 @@ Regra: `domain` não importa nada interno; `ports` importa só `domain`; `app` i
 ## 4. Testes
 
 - **T-01 🟠** CI sem `-race`, `golangci-lint`, `govulncheck` e cobertura. Adicionar `go test -race -cover ./...`, `golangci-lint run`, `govulncheck ./...`.
+  - [x] concluído — `.github/workflows/ci.yml` com gofmt, vet, build, `go test -race` + cobertura (piso de 65%, total atual 74,7%), golangci-lint v1.61.0 e govulncheck; `internal/testutil` (FakeLLM, FakeRepository, Clock, Approver, Asker) para os testes.
 - **T-02 🟠** Testes de segurança dedicados: *path traversal*, symlink, injeção em argv, `CheckCommand`, `remember` envenenado, aprovação em `auto` após observação não confiável.
 - **T-03 🟡** *Fuzz* (`go test -fuzz`) para `ExtractObject`, `ParseCall`, `stripFences`, `resolveWithin`, `ParseArgv`, `parseDecision`.
 - **T-04 🟡** Testes acoplados a campos privados (`a.history`, `a.notes`, `a.steps`) quebrarão na refatoração. Migrar para testes de **comportamento** via portas/eventos antes de quebrar o `Agent`.

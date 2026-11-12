@@ -218,13 +218,19 @@ Uso direto do binário:
 | `-continue`  | retoma a tarefa incompleta salva em checkpoint         | `false`                    |
 | `-approve`   | aprovação de tools mutantes: `ask`, `auto` ou `deny`   | `ask`                      |
 | `-shellallow`| prefixos de comando liberados para `run_shell`         | `ls,cat,grep,find,...`     |
+| `-allow-insecure-http` | aceita `-url` em `http://` para host remoto   | `false`                    |
 
 Variáveis de ambiente equivalentes (usadas como padrão das flags):
 `HARNESS_URL`, `HARNESS_MODEL`, `HARNESS_SYSTEM`, `HARNESS_TEMP`,
 `HARNESS_MAXSTEPS`, `HARNESS_STRATEGY`, `HARNESS_MAXCONTEXT`, `HARNESS_ALLOW`,
 `HARNESS_EMBED_MODEL`, `HARNESS_VERBOSE`, `HARNESS_STORE`, `HARNESS_SESSION`,
 `HARNESS_RESUME`, `HARNESS_CONTINUE`, `HARNESS_APPROVE`, `HARNESS_SHELLALLOW`,
-`HARNESS_RAG`, `HARNESS_TOPK`, `HARNESS_RETRIES`, `HARNESS_BACKOFF`.
+`HARNESS_RAG`, `HARNESS_TOPK`, `HARNESS_RETRIES`, `HARNESS_BACKOFF`,
+`HARNESS_ALLOW_INSECURE_HTTP`.
+
+> `-url` em `http://` só é aceito para `localhost`/loopback: o tráfego vai em
+> claro, então hosts remotos exigem `https://` (ou a flag
+> `-allow-insecure-http`, explícita e desencorajada).
 
 ## Agente com tools (Fase 0)
 
@@ -476,11 +482,14 @@ injeta apenas as `-topk` mais relevantes.
 
 ### Autonomia: retentativas, `ask_user` e `/continue` (Fase 6)
 
-- **Retentativas com backoff exponencial** — toda chamada ao modelo passa por
-  `Agent.complete`, que repete falhas transitórias (conexão recusada, timeout,
-  5xx) até `-retries` vezes, esperando `-backoff`, `2×`, `4×`… Cancelamento do
-  contexto (`Ctrl+C`) interrompe na hora. As tentativas aparecem em `/metrics`
-  como `retentativas: N`.
+- **Retentativas com backoff exponencial e jitter** — toda chamada ao modelo
+  passa por `Agent.complete`, que repete apenas falhas transitórias (erro de
+  transporte: conexão recusada, timeout, stream travado; HTTP `408`, `429` e
+  `5xx` exceto `501`) até `-retries` vezes, esperando `-backoff`, `2×`, `4×`…
+  com ±20% de jitter. Se o servidor mandar `Retry-After`, ele é respeitado (com
+  teto de 30s). Erros de protocolo e `4xx` de pedido inválido não são repetidos.
+  Cancelamento do contexto (`Ctrl+C`) interrompe na hora. As tentativas aparecem
+  em `/metrics` como `retentativas: N`.
 - **`ask_user`** — o agente pode pausar e perguntar algo ao humano quando falta
   informação que só ele tem. No REPL a pergunta aparece como
   `[o agente pergunta] ...` e a resposta volta como observação. Sem canal
