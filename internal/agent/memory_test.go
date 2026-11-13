@@ -77,14 +77,19 @@ func TestRememberPersisteNoStore(t *testing.T) {
 	}
 	defer st.Close()
 
-	a := newMemoryAgent()
+	f := &fakeLLM{}
+	cfg := &config.Config{System: "teste", MaxSteps: 4}
+	a := New(cfg, f, tools.NewRegistry(), safety.New(4, nil))
 	a.SetStore(st)
 	a.SetSession("s1")
 	if err := a.Remember("o usuário prefere respostas curtas"); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	if !strings.Contains(a.history[1].Content, "respostas curtas") {
-		t.Fatalf("nota não foi injetada no contexto: %+v", a.history)
+	if _, err := a.Turn(context.Background(), "oi", nil); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if notas := notasNoContexto(f.requests[0].Messages); !strings.Contains(notas, "respostas curtas") {
+		t.Fatalf("nota não foi injetada no contexto: %q", notas)
 	}
 	if !strings.Contains(a.Memory(), "respostas curtas") {
 		t.Fatalf("Memory() não mostra a nota: %q", a.Memory())
@@ -110,36 +115,56 @@ func TestRememberPersisteNoStore(t *testing.T) {
 }
 
 func TestForgetLimpaMemoriaDaSessao(t *testing.T) {
-	a := newMemoryAgent()
+	f := &fakeLLM{}
+	cfg := &config.Config{System: "teste", MaxSteps: 4}
+	a := New(cfg, f, tools.NewRegistry(), safety.New(4, nil))
 	if err := a.Remember("fato qualquer"); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
 	a.Forget()
 
-	if len(a.notes) != 0 || len(a.memory) != 0 {
-		t.Fatalf("memória não foi limpa: notes=%v memory=%v", a.notes, a.memory)
+	if mem := a.Memory(); !strings.Contains(mem, "(nenhuma)") || !strings.Contains(mem, "(vazio)") {
+		t.Fatalf("memória não foi limpa:\n%s", mem)
 	}
-	for _, m := range a.history {
-		if strings.HasPrefix(m.Content, notesPrefix) || strings.HasPrefix(m.Content, memoryPrefix) {
+	if _, err := a.Turn(context.Background(), "oi", nil); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	for _, m := range f.requests[0].Messages {
+		if strings.HasPrefix(m.Content, "FATOS LEMBRADOS") || strings.HasPrefix(m.Content, "MEMÓRIA DA CONVERSA") {
 			t.Fatalf("mensagem de memória permaneceu no histórico: %+v", m)
 		}
 	}
 }
 
 func TestClearPreservaNotasPersistentes(t *testing.T) {
-	a := newMemoryAgent()
+	f := &fakeLLM{responses: []string{
+		`{"action":"final","answer":"ok"}`,
+		`{"action":"final","answer":"ok"}`,
+	}}
+	cfg := &config.Config{System: "teste", MaxSteps: 4, MaxContextTokens: 10}
+	a := New(cfg, f, tools.NewRegistry(), safety.New(4, nil))
 	if err := a.Remember("projeto usa Go"); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	a.memory = append(a.memory, "- você: algo antigo")
+	// O excedente do segundo turno vira resumo (memória da conversa).
+	if _, err := a.Turn(context.Background(), strings.Repeat("x", 400), nil); err != nil {
+		t.Fatalf("turno 1: %v", err)
+	}
+	if _, err := a.Turn(context.Background(), "de novo", nil); err != nil {
+		t.Fatalf("turno 2: %v", err)
+	}
+	if mem := a.Memory(); strings.Contains(mem, "(vazio)") {
+		t.Fatalf("o resumo deveria existir antes do Clear:\n%s", mem)
+	}
 
 	a.Clear()
 
-	if len(a.memory) != 0 {
-		t.Fatalf("Clear deveria zerar o resumo: %v", a.memory)
+	mem := a.Memory()
+	if !strings.Contains(mem, "(vazio)") {
+		t.Fatalf("Clear deveria zerar o resumo:\n%s", mem)
 	}
-	if !strings.Contains(a.history[1].Content, "projeto usa Go") {
-		t.Fatalf("nota persistente deveria sobreviver ao Clear: %+v", a.history)
+	if !strings.Contains(mem, "projeto usa Go") {
+		t.Fatalf("nota persistente deveria sobreviver ao Clear:\n%s", mem)
 	}
 }
 
@@ -192,17 +217,17 @@ func (f *fakeEmbedder) Embed(_ context.Context, req llm.EmbeddingRequest) ([][]f
 	return out, nil
 }
 
-func newRAGAgent(emb Embedder, topK int) *Agent {
+func newRAGAgent(f *fakeLLM, emb Embedder, topK int) *Agent {
 	cfg := &config.Config{System: "s", MaxSteps: 4, RAG: true, TopK: topK}
-	a := New(cfg, &fakeLLM{}, tools.NewRegistry(), safety.New(4, nil))
+	a := New(cfg, f, tools.NewRegistry(), safety.New(4, nil))
 	a.SetEmbedder(emb)
 	return a
 }
 
-// notesMessage devolve a mensagem de notas injetada no histórico (ou "").
-func notesMessage(a *Agent) string {
-	for _, m := range a.history {
-		if strings.HasPrefix(m.Content, notesPrefix) {
+// notasNoContexto devolve o bloco de notas injetado no contexto (ou "").
+func notasNoContexto(msgs []llm.Message) string {
+	for _, m := range msgs {
+		if strings.HasPrefix(m.Content, "FATOS LEMBRADOS") {
 			return m.Content
 		}
 	}
@@ -210,16 +235,19 @@ func notesMessage(a *Agent) string {
 }
 
 func TestRetrieveNotesUsaSimilaridade(t *testing.T) {
-	a := newRAGAgent(&fakeEmbedder{}, 1)
+	f := &fakeLLM{}
+	a := newRAGAgent(f, &fakeEmbedder{}, 1)
 	for _, n := range []string{"o projeto usa a linguagem Go", "gosto de café sem açúcar"} {
 		if err := a.Remember(n); err != nil {
 			t.Fatalf("Remember: %v", err)
 		}
 	}
 
-	a.retrieveNotes(context.Background(), "qual linguagem usamos?")
+	if _, err := a.Turn(context.Background(), "qual linguagem usamos?", nil); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
 
-	got := notesMessage(a)
+	got := notasNoContexto(f.requests[0].Messages)
 	if !strings.Contains(got, "linguagem Go") {
 		t.Fatalf("nota relevante não foi injetada: %q", got)
 	}
@@ -232,40 +260,47 @@ func TestRetrieveNotesUsaSimilaridade(t *testing.T) {
 }
 
 func TestRetrieveNotesFallbackSemEmbedder(t *testing.T) {
-	a := newRAGAgent(nil, 1)
+	f := &fakeLLM{}
+	a := newRAGAgent(f, nil, 1)
 	for _, n := range []string{"o projeto usa a linguagem Go", "gosto de café sem açúcar"} {
 		if err := a.Remember(n); err != nil {
 			t.Fatalf("Remember: %v", err)
 		}
 	}
 
-	a.retrieveNotes(context.Background(), "qual linguagem usamos?")
+	if _, err := a.Turn(context.Background(), "qual linguagem usamos?", nil); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
 
-	got := notesMessage(a)
+	got := notasNoContexto(f.requests[0].Messages)
 	if !strings.Contains(got, "linguagem Go") || !strings.Contains(got, "café") {
 		t.Fatalf("sem embedder todas as notas deveriam ser injetadas: %q", got)
 	}
 }
 
 func TestRetrieveNotesFallbackComErroDeEmbedding(t *testing.T) {
-	a := newRAGAgent(&fakeEmbedder{err: errors.New("sem /embeddings")}, 1)
+	f := &fakeLLM{}
+	a := newRAGAgent(f, &fakeEmbedder{err: errors.New("sem /embeddings")}, 1)
 	for _, n := range []string{"o projeto usa a linguagem Go", "gosto de café sem açúcar"} {
 		if err := a.Remember(n); err != nil {
 			t.Fatalf("Remember: %v", err)
 		}
 	}
 
-	a.retrieveNotes(context.Background(), "qual linguagem usamos?")
+	if _, err := a.Turn(context.Background(), "qual linguagem usamos?", nil); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
 
-	got := notesMessage(a)
+	got := notasNoContexto(f.requests[0].Messages)
 	if !strings.Contains(got, "linguagem Go") || !strings.Contains(got, "café") {
 		t.Fatalf("com erro no /embeddings todas as notas deveriam ser injetadas: %q", got)
 	}
 }
 
 func TestRetrieveNotesSemRAGInjetaTodas(t *testing.T) {
+	f := &fakeLLM{}
 	cfg := &config.Config{System: "s", MaxSteps: 4, TopK: 1}
-	a := New(cfg, &fakeLLM{}, tools.NewRegistry(), safety.New(4, nil))
+	a := New(cfg, f, tools.NewRegistry(), safety.New(4, nil))
 	emb := &fakeEmbedder{}
 	a.SetEmbedder(emb)
 	for _, n := range []string{"o projeto usa a linguagem Go", "gosto de café sem açúcar"} {
@@ -274,12 +309,14 @@ func TestRetrieveNotesSemRAGInjetaTodas(t *testing.T) {
 		}
 	}
 
-	a.retrieveNotes(context.Background(), "qual linguagem usamos?")
+	if _, err := a.Turn(context.Background(), "qual linguagem usamos?", nil); err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
 
 	if emb.calls != 0 {
 		t.Fatalf("sem -rag não deveria chamar /embeddings (calls = %d)", emb.calls)
 	}
-	got := notesMessage(a)
+	got := notasNoContexto(f.requests[0].Messages)
 	if !strings.Contains(got, "linguagem Go") || !strings.Contains(got, "café") {
 		t.Fatalf("notas injetadas: %q", got)
 	}
@@ -287,16 +324,22 @@ func TestRetrieveNotesSemRAGInjetaTodas(t *testing.T) {
 
 func TestEmbedOneCacheiaVetores(t *testing.T) {
 	emb := &fakeEmbedder{}
-	a := newRAGAgent(emb, 5)
+	f := &fakeLLM{}
+	a := newRAGAgent(f, emb, 1)
+	for _, n := range []string{"o projeto usa a linguagem Go", "gosto de café sem açúcar"} {
+		if err := a.Remember(n); err != nil {
+			t.Fatalf("Remember: %v", err)
+		}
+	}
 
-	if _, err := a.embedOne(context.Background(), "mesmo texto"); err != nil {
-		t.Fatalf("embedOne: %v", err)
+	// A mesma pergunta duas vezes: consulta e notas vêm do cache na segunda vez.
+	for i := 0; i < 2; i++ {
+		if _, err := a.Turn(context.Background(), "qual linguagem usamos?", nil); err != nil {
+			t.Fatalf("turno %d: %v", i+1, err)
+		}
 	}
-	if _, err := a.embedOne(context.Background(), "mesmo texto"); err != nil {
-		t.Fatalf("embedOne: %v", err)
-	}
-	if emb.calls != 1 {
-		t.Fatalf("embeddings = %d, esperava 1 (cache)", emb.calls)
+	if emb.calls != 3 {
+		t.Fatalf("embeddings = %d, esperava 3 (consulta + 2 notas, com cache)", emb.calls)
 	}
 }
 
