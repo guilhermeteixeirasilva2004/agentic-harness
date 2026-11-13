@@ -554,14 +554,19 @@ internal/llm             cliente OpenAI-compatível: streaming, Complete e Embed
 internal/cognition       trace estruturado do raciocínio (passos + orçamento)
 internal/reasoning       estratégias react/cot/plan e schemas de decisão
 internal/agent           loop ReAct com tool calling orquestrado em Go
-                         (memória, RAG leve, retentativas, ask_user,
-                          streaming do final e checkpoint para -continue)
+                         (RAG leve, retentativas, ask_user, streaming do
+                          final e checkpoint para -continue)
+internal/present         formatação de histórico/sessões (funções puras)
+internal/memory          resumo da conversa, notas e injeção no contexto
+internal/checkpoint      detecção do checkpoint pendente (funções puras)
 internal/evals           catálogo de 12 tarefas, graders e runner NDJSON
 internal/tools           contrato Tool, registry, allowlist e tools embutidas
 internal/safety          guardrails (limites, allowlist, teto de passos)
 internal/observ          métricas de execução (latência, tokens, tools)
 internal/store           persistência NDJSON append-only de sessões
 internal/specbench       ciclo de vida do llama-server + métricas
+internal/textutil        corte de UTF-8 com limite de runas/bytes
+internal/arch            teste de arquitetura (anti-ciclo) via `go list`
 internal/ui              REPL de terminal (aprovação no terminal) + engine de chat
 docs/                    mapa de dependências e documentação da linha de base
 scripts/                 build CUDA, subir servidor, benchmark e mapa de imports
