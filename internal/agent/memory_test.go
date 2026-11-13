@@ -21,19 +21,31 @@ func newMemoryAgent() *Agent {
 	return New(cfg, &fakeLLM{}, tools.NewRegistry(), safety.New(4, nil))
 }
 
+// TestTrimHistoryResumeNaMemoria verifica pelo wire que as mensagens descartadas
+// viram linhas do resumo (você/assistente/harness) e que um novo trim não
+// duplica o bloco de memória.
 func TestTrimHistoryResumeNaMemoria(t *testing.T) {
+	f := &fakeLLM{responses: []string{
+		`{"action":"final","answer":"` + strings.Repeat("a", 400) + `"}`,
+		`{"action":"final","answer":"ok"}`,
+		`{"action":"final","answer":"ok"}`,
+		`{"action":"final","answer":"ok"}`,
+	}}
 	cfg := &config.Config{System: "s", MaxSteps: 4, MaxContextTokens: 10}
-	a := New(cfg, &fakeLLM{}, tools.NewRegistry(), safety.New(4, nil))
-	a.history = append(a.history,
-		llm.Message{Role: llm.RoleUser, Content: strings.Repeat("u", 400)},
-		llm.Message{Role: llm.RoleAssistant, Content: strings.Repeat("a", 400)},
-		llm.Message{Role: llm.RoleUser, Content: "OBSERVAÇÃO (read_file): conteúdo"},
-		llm.Message{Role: llm.RoleUser, Content: "pergunta atual"},
-	)
+	a := New(cfg, f, tools.NewRegistry(), safety.New(4, nil))
 
-	a.trimHistory()
+	entradas := []string{
+		strings.Repeat("u", 400),
+		"OBSERVAÇÃO (read_file): conteúdo",
+		"pergunta atual",
+	}
+	for i, in := range entradas {
+		if _, err := a.Turn(context.Background(), in, nil); err != nil {
+			t.Fatalf("turno %d: %v", i+1, err)
+		}
+	}
 
-	mem := a.history[1].Content
+	mem := f.requests[2].Messages[1].Content
 	for _, want := range []string{"você: ", "assistente: ", "harness: OBSERVAÇÃO"} {
 		if !strings.Contains(mem, want) {
 			t.Fatalf("resumo sem %q: %q", want, mem)
@@ -42,17 +54,19 @@ func TestTrimHistoryResumeNaMemoria(t *testing.T) {
 	if !strings.Contains(a.Memory(), "resumo da conversa") {
 		t.Fatalf("Memory() inesperado: %q", a.Memory())
 	}
-	// Um segundo trim não deve duplicar o resumo no histórico.
-	a.history = append(a.history, llm.Message{Role: llm.RoleUser, Content: strings.Repeat("z", 400)})
-	a.trimHistory()
+
+	// Um novo turno força outro trim: o resumo continua único no histórico.
+	if _, err := a.Turn(context.Background(), strings.Repeat("z", 400), nil); err != nil {
+		t.Fatalf("turno 4: %v", err)
+	}
 	count := 0
-	for _, m := range a.history {
-		if strings.HasPrefix(m.Content, memoryPrefix) {
+	for _, m := range f.requests[3].Messages {
+		if strings.HasPrefix(m.Content, "MEMÓRIA DA CONVERSA (resumo acumulado):") {
 			count++
 		}
 	}
 	if count != 1 {
-		t.Fatalf("resumo duplicado no histórico (%d ocorrências): %+v", count, a.history)
+		t.Fatalf("resumo duplicado no histórico (%d ocorrências): %+v", count, f.requests[3].Messages)
 	}
 }
 

@@ -374,32 +374,39 @@ func TestTurnToolSemNomeRealimentaErro(t *testing.T) {
 	}
 }
 
+// TestTrimHistoryRespeitaOrcamento verifica pelo wire (o que foi pedido ao
+// modelo) que o excesso é descartado preservando system prompt, resumo da
+// memória e a última mensagem.
 func TestTrimHistoryRespeitaOrcamento(t *testing.T) {
-	f := &fakeLLM{}
+	f := &fakeLLM{responses: []string{
+		`{"action":"final","answer":"` + strings.Repeat("b", 400) + `"}`,
+		`{"action":"final","answer":"ok"}`,
+	}}
 	cfg := &config.Config{System: "s", MaxSteps: 4, MaxContextTokens: 10}
 	a := New(cfg, f, tools.NewRegistry(), safety.New(4, nil))
-	a.history = append(a.history,
-		llm.Message{Role: llm.RoleUser, Content: strings.Repeat("a", 400)},
-		llm.Message{Role: llm.RoleAssistant, Content: strings.Repeat("b", 400)},
-		llm.Message{Role: llm.RoleUser, Content: "recente"},
-	)
 
-	a.trimHistory()
+	if _, err := a.Turn(context.Background(), strings.Repeat("a", 400), nil); err != nil {
+		t.Fatalf("turno 1: %v", err)
+	}
+	if _, err := a.Turn(context.Background(), "recente", nil); err != nil {
+		t.Fatalf("turno 2: %v", err)
+	}
 
-	if len(a.history) != 3 {
-		t.Fatalf("histórico = %d mensagens, esperava 3 (system + memória + recente): %+v", len(a.history), a.history)
+	msgs := f.requests[1].Messages
+	if len(msgs) != 3 {
+		t.Fatalf("histórico enviado = %d mensagens, esperava 3 (system + memória + recente): %+v", len(msgs), msgs)
 	}
-	if a.history[0].Role != llm.RoleSystem {
-		t.Fatalf("system prompt foi descartado: %+v", a.history)
+	if msgs[0].Role != llm.RoleSystem {
+		t.Fatalf("system prompt foi descartado: %+v", msgs)
 	}
-	if !strings.HasPrefix(a.history[1].Content, memoryPrefix) {
-		t.Fatalf("esperava o resumo na memória (posição 1): %+v", a.history)
+	if !strings.HasPrefix(msgs[1].Content, "MEMÓRIA DA CONVERSA (resumo acumulado):") {
+		t.Fatalf("esperava o resumo na memória (posição 1): %+v", msgs)
 	}
-	if !strings.Contains(a.history[1].Content, "aaaa") {
-		t.Fatalf("resumo não preservou o conteúdo descartado: %+v", a.history[1].Content)
+	if !strings.Contains(msgs[1].Content, "aaaa") {
+		t.Fatalf("resumo não preservou o conteúdo descartado: %+v", msgs[1].Content)
 	}
-	if a.history[2].Content != "recente" {
-		t.Fatalf("última mensagem não foi preservada: %+v", a.history)
+	if msgs[2].Content != "recente" {
+		t.Fatalf("última mensagem não foi preservada: %+v", msgs)
 	}
 }
 
