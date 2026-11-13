@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentic-harness/internal/checkpoint"
 	"agentic-harness/internal/llm"
 	"agentic-harness/internal/store"
 )
@@ -37,7 +38,7 @@ func TestCheckpointGravadoAoEsgotarPassos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	var cp checkpointRecord
+	var cp checkpoint.Record
 	found := false
 	for _, r := range recs {
 		if r.Type != "checkpoint" || r.Session != "cp-grava" {
@@ -104,7 +105,7 @@ func TestContinueRestauraEConclui(t *testing.T) {
 		if strings.Contains(m.Content, "OBSERVAÇÃO") {
 			sawObservation = true
 		}
-		if m.Content == continuePrompt {
+		if m.Content == checkpoint.ContinuePrompt {
 			sawContinue = true
 		}
 	}
@@ -139,7 +140,7 @@ func TestResumeTaskSemCheckpointUsaHistorico(t *testing.T) {
 	}
 	found := false
 	for _, m := range f.requests[0].Messages {
-		if m.Content == continuePrompt {
+		if m.Content == checkpoint.ContinuePrompt {
 			found = true
 		}
 	}
@@ -168,7 +169,7 @@ func TestContinueSemCheckpoint(t *testing.T) {
 }
 
 func TestCheckpointRestauraPlanoEEstrategia(t *testing.T) {
-	cp := checkpointRecord{
+	cp := checkpoint.Record{
 		Input:    "tarefa",
 		History:  []llm.Message{{Role: llm.RoleSystem, Content: "system"}},
 		Memory:   []string{"- você: contexto anterior"},
