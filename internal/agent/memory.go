@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 
 	"agentic-harness/internal/llm"
+	"agentic-harness/internal/memory"
 	"agentic-harness/internal/store"
-	"agentic-harness/internal/textutil"
 )
 
 // Memória de longo prazo do agente, em duas camadas:
@@ -21,17 +20,9 @@ import (
 //  2. notas persistentes no store (registros do tipo "memory"): fatos que o
 //     usuário (ou o próprio agente, via tool "remember") grava e que valem
 //     entre sessões.
-const (
-	memoryPrefix = "MEMÓRIA DA CONVERSA (resumo acumulado):\n"
-	notesPrefix  = "FATOS LEMBRADOS (memória de longo prazo):\n"
-
-	// maxMemoryNotes limita quantas linhas/notas ficam no contexto.
-	maxMemoryNotes = 40
-	// maxMemoryChars limita o tamanho total do resumo acumulado.
-	maxMemoryChars = 8000
-	// maxNoteChars limita o tamanho de uma nota individual.
-	maxNoteChars = 500
-)
+//
+// As regras puras (formato dos blocos, limites, cosseno) vivem em
+// internal/memory; aqui ficam só o estado do agente e o I/O do store.
 
 // noteRecord é o payload persistido para uma nota de memória.
 type noteRecord struct {
@@ -89,7 +80,7 @@ func (a *Agent) retrieveNotes(ctx context.Context, query string) {
 			a.refreshMemory()
 			return
 		}
-		ranked = append(ranked, scored{note: n, score: cosineSimilarity(queryVec, noteVec)})
+		ranked = append(ranked, scored{note: n, score: memory.Cosine(queryVec, noteVec)})
 	}
 	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
 	if top > len(ranked) {
@@ -123,121 +114,28 @@ func (a *Agent) embedOne(ctx context.Context, text string) ([]float32, error) {
 	return vecs[0], nil
 }
 
-// cosineSimilarity calcula a similaridade de cosseno entre dois vetores.
-func cosineSimilarity(a, b []float32) float64 {
-	if len(a) == 0 || len(a) != len(b) {
-		return 0
-	}
-	var dot, na, nb float64
-	for i := range a {
-		x, y := float64(a[i]), float64(b[i])
-		dot += x * y
-		na += x * x
-		nb += y * y
-	}
-	if na == 0 || nb == 0 {
-		return 0
-	}
-	return dot / (math.Sqrt(na) * math.Sqrt(nb))
-}
-
 // remember acumula no resumo as mensagens descartadas pelo trimHistory.
 func (a *Agent) remember(dropped []llm.Message) {
-	for _, m := range dropped {
-		line := memoryLine(m)
-		if line == "" {
-			continue
-		}
-		if n := len(a.memory); n > 0 && a.memory[n-1] == line {
-			continue
-		}
-		a.memory = append(a.memory, line)
-	}
-	if len(a.memory) > maxMemoryNotes {
-		a.memory = a.memory[len(a.memory)-maxMemoryNotes:]
-	}
-	for len(a.memory) > 1 && len(strings.Join(a.memory, "\n")) > maxMemoryChars {
-		a.memory = a.memory[1:]
-	}
+	a.memory = memory.Summarize(a.memory, dropped)
 	a.refreshMemory()
-}
-
-// memoryLine resume uma mensagem descartada em uma linha curta.
-func memoryLine(m llm.Message) string {
-	content := strings.TrimSpace(strings.ReplaceAll(m.Content, "\n", " "))
-	if content == "" {
-		return ""
-	}
-	var role string
-	switch {
-	case strings.HasPrefix(content, "OBSERVAÇÃO (") || strings.HasPrefix(content, "ERRO ("):
-		role = "harness"
-	case m.Role == llm.RoleUser:
-		role = "você"
-	case m.Role == llm.RoleAssistant:
-		role = "assistente"
-	default:
-		return ""
-	}
-	return "- " + role + ": " + truncateForLog(content, 200)
 }
 
 // refreshMemory (re)injeta as mensagens de memória logo após o system prompt,
 // removendo versões antigas antes de inserir as atuais.
 func (a *Agent) refreshMemory() {
-	kept := a.history[:0]
-	for _, m := range a.history {
-		if strings.HasPrefix(m.Content, memoryPrefix) || strings.HasPrefix(m.Content, notesPrefix) {
-			continue
-		}
-		kept = append(kept, m)
-	}
-	a.history = kept
-
-	var extra []llm.Message
-	if notes := a.notesForContext(); len(notes) > 0 {
-		var b strings.Builder
-		b.WriteString(notesPrefix)
-		for _, n := range notes {
-			b.WriteString("- " + n + "\n")
-		}
-		extra = append(extra, llm.Message{Role: llm.RoleSystem, Content: strings.TrimRight(b.String(), "\n")})
-	}
-	if len(a.memory) > 0 {
-		var b strings.Builder
-		b.WriteString(memoryPrefix)
-		for _, m := range a.memory {
-			b.WriteString(m + "\n")
-		}
-		extra = append(extra, llm.Message{Role: llm.RoleSystem, Content: strings.TrimRight(b.String(), "\n")})
-	}
-	if len(extra) == 0 {
-		return
-	}
-	pos := 0
-	if len(a.history) > 0 && a.history[0].Role == llm.RoleSystem {
-		pos = 1
-	}
-	out := make([]llm.Message, 0, len(a.history)+len(extra))
-	out = append(out, a.history[:pos]...)
-	out = append(out, extra...)
-	out = append(out, a.history[pos:]...)
-	a.history = out
+	a.history = memory.Inject(a.history, a.notesForContext(), a.memory)
 }
 
 // Remember grava uma nota de memória de longo prazo. Mantém em memória para a
 // sessão atual e persiste no store quando houver um conectado.
 func (a *Agent) Remember(note string) error {
-	note = strings.TrimSpace(strings.ReplaceAll(note, "\n", " "))
-	if note == "" {
+	note, ok := memory.Normalize(note)
+	if !ok {
 		return fmt.Errorf("nota vazia")
 	}
-	if len(note) > maxNoteChars {
-		note = textutil.TruncateRunes(note, maxNoteChars)
-	}
 	a.notes = append(a.notes, note)
-	if len(a.notes) > maxMemoryNotes {
-		a.notes = a.notes[len(a.notes)-maxMemoryNotes:]
+	if len(a.notes) > memory.MaxNotes {
+		a.notes = a.notes[len(a.notes)-memory.MaxNotes:]
 	}
 	// Uma nota nova invalida a seleção por similaridade do turno anterior.
 	a.selected = nil
@@ -306,10 +204,7 @@ func (a *Agent) LoadMemory() error {
 
 // applyNotes acrescenta as notas persistidas, sem duplicar as já conhecidas.
 func (a *Agent) applyNotes(recs []store.Record) {
-	seen := make(map[string]bool, len(a.notes))
-	for _, n := range a.notes {
-		seen[n] = true
-	}
+	var persisted []string
 	for _, r := range recs {
 		if r.Type != "memory" {
 			continue
@@ -318,14 +213,9 @@ func (a *Agent) applyNotes(recs []store.Record) {
 		if err := json.Unmarshal(r.Payload, &n); err != nil {
 			continue
 		}
-		text := strings.TrimSpace(n.Text)
-		if text == "" || seen[text] {
-			continue
+		if text := strings.TrimSpace(n.Text); text != "" {
+			persisted = append(persisted, text)
 		}
-		seen[text] = true
-		a.notes = append(a.notes, text)
 	}
-	if len(a.notes) > maxMemoryNotes {
-		a.notes = a.notes[len(a.notes)-maxMemoryNotes:]
-	}
+	a.notes = memory.Merge(a.notes, persisted)
 }

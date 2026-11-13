@@ -14,6 +14,7 @@ import (
 
 	"agentic-harness/internal/config"
 	"agentic-harness/internal/llm"
+	"agentic-harness/internal/memory"
 	"agentic-harness/internal/safety"
 	"agentic-harness/internal/store"
 	"agentic-harness/internal/tools"
@@ -342,7 +343,7 @@ func TestE2ERAGSelecionaNotasRelevantes(t *testing.T) {
 
 	var notes string
 	for _, m := range srv.lastRequest().Messages {
-		if strings.HasPrefix(m.Content, notesPrefix) {
+		if strings.HasPrefix(m.Content, memory.NotesPrefix) {
 			notes = m.Content
 		}
 	}

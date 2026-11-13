@@ -30,6 +30,7 @@ incluir `cmd/evals` (tag `eval`), rode `GOFLAGS=-tags=eval scripts/depmap.sh`.
 ./internal/agent -> ./internal/cognition
 ./internal/agent -> ./internal/config
 ./internal/agent -> ./internal/llm
+./internal/agent -> ./internal/memory
 ./internal/agent -> ./internal/observ
 ./internal/agent -> ./internal/present
 ./internal/agent -> ./internal/reasoning
@@ -40,6 +41,8 @@ incluir `cmd/evals` (tag `eval`), rode `GOFLAGS=-tags=eval scripts/depmap.sh`.
 ./internal/checkpoint -> ./internal/llm
 ./internal/checkpoint -> ./internal/store
 ./internal/llm -> ./internal/textutil
+./internal/memory -> ./internal/llm
+./internal/memory -> ./internal/textutil
 ./internal/present -> ./internal/llm
 ./internal/present -> ./internal/store
 ./internal/present -> ./internal/textutil
@@ -67,7 +70,7 @@ padrão para não depender de build tag):
 
 | Pacote | Linhas | Papel atual |
 |---|---:|---|
-| `internal/agent` | 4182 | loop ReAct + contexto + memória + checkpoint + sessões + aprovação + composição |
+| `internal/agent` | 4077 | loop ReAct + contexto + memória + checkpoint + sessões + aprovação + composição |
 | `internal/tools` | 1900 | tools e registry |
 | `internal/ui` | 791 | REPL, aprovação e renderização no terminal |
 | `internal/llm` | 689 | cliente OpenAI-compatible |
@@ -79,6 +82,7 @@ padrão para não depender de build tag):
 | `internal/observ` | 288 | métricas |
 | `internal/store` | 277 | NDJSON append-only |
 | `internal/reasoning` | 277 | estratégias react/cot/plan |
+| `internal/memory` | 361 | resumo/notas/cosseno e injeção no histórico, puro sobre `llm.Message` |
 | `internal/present` | 233 | formatação de histórico/sessões (sem I/O e sem `agent`) |
 | `internal/checkpoint` | 186 | detecção do checkpoint pendente (save state), puro sobre `store.Record` |
 | `cmd/evals` | 228 | composition root do runner de evals (tag `eval`) |
@@ -92,7 +96,7 @@ padrão para não depender de build tag):
 |---|---|---|---|---|
 | 1 | `ui -> agent` | A-04 | A camada de apresentação define o contrato do núcleo. Pior: `ui` importa `agent` só para `ApprovalRequest`, `Approver` e `Asker`, e o `Agent` importa de volta conceitos de UI (mensagens citam `/continue`). | Mover as portas `Approver`/`Asker`/`ApprovalRequest` para `internal/ports` e fazer `ui` depender só delas (passo 3). |
 | 2 | `agent -> config` | A-03 | O núcleo lê a struct de flags da CLI; o composition root (`NewDefault`) mora dentro do núcleo e chama `os.Getwd`, monta registry, cliente e política. | `agent.New` recebe dependências injetadas; `NewDefault` sai para `cmd/`/`internal/bootstrap` (passo 3). |
-| 3 | `agent -> tools/store/llm/safety/...` | A-01 | Nove pacotes internos entram no `Agent`: loop, contexto, memória, checkpoint, sessões, aprovação e métricas no mesmo tipo. | Extrair `present` (2a, **feito**), `checkpoint` (2b, **feito**) e memória (2c); portas no passo 3. |
+| 3 | `agent -> tools/store/llm/safety/...` | A-01 | Nove pacotes internos entram no `Agent`: loop, contexto, memória, checkpoint, sessões, aprovação e métricas no mesmo tipo. | Extrair `present` (2a, **feito**), `checkpoint` (2b, **feito**) e `memory` (2c, **feito**); portas no passo 3. |
 
 ## Arestas que o teste de arquitetura deve proibir
 

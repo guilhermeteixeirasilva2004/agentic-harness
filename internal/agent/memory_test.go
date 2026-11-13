@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -340,42 +339,5 @@ func TestEmbedOneCacheiaVetores(t *testing.T) {
 	}
 	if emb.calls != 3 {
 		t.Fatalf("embeddings = %d, esperava 3 (consulta + 2 notas, com cache)", emb.calls)
-	}
-}
-
-func TestCosineSimilarity(t *testing.T) {
-	cases := []struct {
-		a, b []float32
-		want float64
-	}{
-		{[]float32{1, 0}, []float32{1, 0}, 1},
-		{[]float32{1, 0}, []float32{0, 1}, 0},
-		{[]float32{1, 0}, []float32{1, 1}, 0.7071067811865475},
-		{nil, []float32{1, 0}, 0},
-		{[]float32{0, 0}, []float32{1, 0}, 0},
-		{[]float32{1, 0}, []float32{1, 0, 0}, 0},
-	}
-	for _, tc := range cases {
-		if got := cosineSimilarity(tc.a, tc.b); math.Abs(got-tc.want) > 1e-9 {
-			t.Fatalf("cosineSimilarity(%v, %v) = %v, esperava %v", tc.a, tc.b, got, tc.want)
-		}
-	}
-}
-
-func TestMemoryLine(t *testing.T) {
-	cases := []struct {
-		msg  llm.Message
-		want string
-	}{
-		{llm.Message{Role: llm.RoleUser, Content: "oi"}, "- você: oi"},
-		{llm.Message{Role: llm.RoleAssistant, Content: "olá"}, "- assistente: olá"},
-		{llm.Message{Role: llm.RoleUser, Content: "ERRO (x): falhou"}, "- harness: ERRO (x): falhou"},
-		{llm.Message{Role: llm.RoleSystem, Content: "sistema"}, ""},
-		{llm.Message{Role: llm.RoleUser, Content: "  \n "}, ""},
-	}
-	for _, tc := range cases {
-		if got := memoryLine(tc.msg); got != tc.want {
-			t.Fatalf("memoryLine(%+v) = %q, esperava %q", tc.msg, got, tc.want)
-		}
 	}
 }

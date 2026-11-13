@@ -16,6 +16,7 @@ import (
 	"agentic-harness/internal/cognition"
 	"agentic-harness/internal/config"
 	"agentic-harness/internal/llm"
+	"agentic-harness/internal/memory"
 	"agentic-harness/internal/observ"
 	"agentic-harness/internal/present"
 	"agentic-harness/internal/reasoning"
@@ -569,9 +570,7 @@ func (a *Agent) trimHistory() {
 
 // isPinned informa se a mensagem não pode ser descartada pelo trimHistory.
 func isPinned(m llm.Message) bool {
-	return strings.HasPrefix(m.Content, planPrefix) ||
-		strings.HasPrefix(m.Content, memoryPrefix) ||
-		strings.HasPrefix(m.Content, notesPrefix)
+	return strings.HasPrefix(m.Content, planPrefix) || memory.Is(m)
 }
 
 func newTraceID() string {
