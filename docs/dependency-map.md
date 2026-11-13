@@ -1,10 +1,10 @@
 # Mapa de dependências internas
 
 Fotografia das arestas de import **entre pacotes do próprio módulo** no fim da
-Fase A (base `71b0034` + suíte de evals). É o artefato do passo 1 do refactor
-(A-01/A-03/A-04) e a referência para o teste automatizado da regra de
-dependência. Imports de stdlib ficam de fora de propósito: a regra que nos
-interessa é "core não conhece adapter".
+Fase A (base `71b0034` + suíte de evals), atualizada a cada extração do passo 2.
+É o artefato do passo 1 do refactor (A-01/A-03/A-04) e a referência para o teste
+automatizado da regra de dependência. Imports de stdlib ficam de fora de
+propósito: a regra que nos interessa é "core não conhece adapter".
 
 Regenerar depois de criar, mover ou remover um pacote:
 
@@ -30,12 +30,16 @@ incluir `cmd/evals` (tag `eval`), rode `GOFLAGS=-tags=eval scripts/depmap.sh`.
 ./internal/agent -> ./internal/config
 ./internal/agent -> ./internal/llm
 ./internal/agent -> ./internal/observ
+./internal/agent -> ./internal/present
 ./internal/agent -> ./internal/reasoning
 ./internal/agent -> ./internal/safety
 ./internal/agent -> ./internal/store
 ./internal/agent -> ./internal/textutil
 ./internal/agent -> ./internal/tools
 ./internal/llm -> ./internal/textutil
+./internal/present -> ./internal/llm
+./internal/present -> ./internal/store
+./internal/present -> ./internal/textutil
 ./internal/safety -> ./internal/textutil
 ./internal/testutil -> ./internal/llm
 ./internal/testutil -> ./internal/store
@@ -56,11 +60,11 @@ padrão para não depender de build tag):
 ./cmd/evals -> ./internal/store
 ```
 
-## Tamanho dos pacotes (linhas de `.go`, sem testes separados)
+## Tamanho dos pacotes (linhas de `.go`, incluindo testes)
 
 | Pacote | Linhas | Papel atual |
 |---|---:|---|
-| `internal/agent` | 3774 | loop ReAct + contexto + memória + checkpoint + sessões + aprovação + composição |
+| `internal/agent` | 4245 | loop ReAct + contexto + memória + checkpoint + sessões + aprovação + composição |
 | `internal/tools` | 1900 | tools e registry |
 | `internal/ui` | 791 | REPL, aprovação e renderização no terminal |
 | `internal/llm` | 689 | cliente OpenAI-compatible |
@@ -72,9 +76,11 @@ padrão para não depender de build tag):
 | `internal/observ` | 288 | métricas |
 | `internal/store` | 277 | NDJSON append-only |
 | `internal/reasoning` | 277 | estratégias react/cot/plan |
+| `internal/present` | 233 | formatação de histórico/sessões (sem I/O e sem `agent`) |
 | `cmd/evals` | 228 | composition root do runner de evals (tag `eval`) |
 | `internal/safety` | 153 | política de passos/allowlist/truncamento |
 | `internal/textutil` | 129 | corte de UTF-8 |
+| `internal/arch` | 79 | teste de arquitetura (anti-ciclo) via `go list` |
 
 ## Violações da regra de dependência
 
@@ -82,7 +88,7 @@ padrão para não depender de build tag):
 |---|---|---|---|---|
 | 1 | `ui -> agent` | A-04 | A camada de apresentação define o contrato do núcleo. Pior: `ui` importa `agent` só para `ApprovalRequest`, `Approver` e `Asker`, e o `Agent` importa de volta conceitos de UI (mensagens citam `/continue`). | Mover as portas `Approver`/`Asker`/`ApprovalRequest` para `internal/ports` e fazer `ui` depender só delas (passo 3). |
 | 2 | `agent -> config` | A-03 | O núcleo lê a struct de flags da CLI; o composition root (`NewDefault`) mora dentro do núcleo e chama `os.Getwd`, monta registry, cliente e política. | `agent.New` recebe dependências injetadas; `NewDefault` sai para `cmd/`/`internal/bootstrap` (passo 3). |
-| 3 | `agent -> tools/store/llm/safety/...` | A-01 | Nove pacotes internos entram no `Agent`: loop, contexto, memória, checkpoint, sessões, aprovação e métricas no mesmo tipo. | Extrair `present` (passo 2a), `CheckpointService` (2b) e `MemoryService` (2c); portas no passo 3. |
+| 3 | `agent -> tools/store/llm/safety/...` | A-01 | Nove pacotes internos entram no `Agent`: loop, contexto, memória, checkpoint, sessões, aprovação e métricas no mesmo tipo. | Extrair `present` (passo 2a, **feito**: `internal/present`), `CheckpointService` (2b) e `MemoryService` (2c); portas no passo 3. |
 
 ## Arestas que o teste de arquitetura deve proibir
 

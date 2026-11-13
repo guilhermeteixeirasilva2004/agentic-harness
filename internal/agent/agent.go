@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"agentic-harness/internal/config"
 	"agentic-harness/internal/llm"
 	"agentic-harness/internal/observ"
+	"agentic-harness/internal/present"
 	"agentic-harness/internal/reasoning"
 	"agentic-harness/internal/safety"
 	"agentic-harness/internal/store"
@@ -206,19 +206,7 @@ func (a *Agent) SessionID() string { return a.session }
 func (a *Agent) Metrics() string { return a.meter.Snapshot().Summary() }
 
 // History devolve o histórico da conversa em texto legível.
-func (a *Agent) History() string {
-	var b strings.Builder
-	for _, m := range a.history {
-		if m.Role == llm.RoleSystem {
-			continue
-		}
-		fmt.Fprintf(&b, "[%s] %s\n", m.Role, truncateForLog(m.Content, 300))
-	}
-	if b.Len() == 0 {
-		return "(histórico vazio)"
-	}
-	return b.String()
-}
+func (a *Agent) History() string { return present.History(a.history) }
 
 // Resume restaura o histórico de uma sessão persistida. Sem sessão explícita,
 // retoma a mais recente. Exige um store conectado.
@@ -274,41 +262,7 @@ func (a *Agent) Sessions() string {
 	if err != nil {
 		return "erro ao ler sessões: " + err.Error()
 	}
-	type agg struct {
-		turns int
-		last  time.Time
-	}
-	byID := make(map[string]*agg)
-	var order []string
-	for _, r := range recs {
-		if r.Type != "turn" || r.Session == "" {
-			continue
-		}
-		g := byID[r.Session]
-		if g == nil {
-			g = &agg{}
-			byID[r.Session] = g
-			order = append(order, r.Session)
-		}
-		g.turns++
-		if r.At.After(g.last) {
-			g.last = r.At
-		}
-	}
-	if len(order) == 0 {
-		return "(nenhuma sessão persistida)"
-	}
-	sort.Slice(order, func(i, j int) bool { return byID[order[i]].last.After(byID[order[j]].last) })
-	var b strings.Builder
-	fmt.Fprintf(&b, "sessões persistidas em %s:\n", a.store.Path())
-	for _, id := range order {
-		mark := ""
-		if id == a.session {
-			mark = " *"
-		}
-		fmt.Fprintf(&b, "  %-24s %d turno(s), último %s%s\n", id, byID[id].turns, byID[id].last.Format("2006-01-02 15:04:05"), mark)
-	}
-	return b.String()
+	return present.Sessions(a.store.Path(), recs, a.session)
 }
 
 // ShowSession mostra os turnos de uma sessão persistida (vazio = sessão atual).
@@ -324,30 +278,7 @@ func (a *Agent) ShowSession(id string) string {
 	if err != nil {
 		return "erro ao ler sessões: " + err.Error()
 	}
-	var b strings.Builder
-	n := 0
-	for _, r := range recs {
-		if r.Type != "turn" || r.Session != id {
-			continue
-		}
-		var t turnRecord
-		if err := json.Unmarshal(r.Payload, &t); err != nil {
-			continue
-		}
-		n++
-		fmt.Fprintf(&b, "#%d %s\n", n, r.At.Format("2006-01-02 15:04:05"))
-		fmt.Fprintf(&b, "  você> %s\n", truncateForLog(t.Input, 300))
-		if t.Output != "" {
-			fmt.Fprintf(&b, "  assistente> %s\n", truncateForLog(t.Output, 500))
-		}
-		if t.Error != "" {
-			fmt.Fprintf(&b, "  erro: %s\n", t.Error)
-		}
-	}
-	if n == 0 {
-		return fmt.Sprintf("(sessão %q não encontrada)", id)
-	}
-	return b.String()
+	return present.ShowSession(recs, id)
 }
 
 // turnRecord é o payload persistido ao fim de cada turno.
