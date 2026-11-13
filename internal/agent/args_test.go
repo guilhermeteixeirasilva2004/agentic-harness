@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"agentic-harness/internal/cognition"
 	"agentic-harness/internal/llm"
 	"agentic-harness/internal/tools"
 )
@@ -52,14 +51,8 @@ func TestFillArgsFalhaNaoExecutaTool(t *testing.T) {
 		}
 	}
 
-	var sawArgsError bool
-	for _, s := range a.steps.Steps {
-		if s.Kind == cognition.KindError && strings.Contains(s.Observation, "ERRO (args)") {
-			sawArgsError = true
-		}
-	}
-	if !sawArgsError {
-		t.Fatalf("trace sem etapa de erro de argumentos: %+v", a.steps.Steps)
+	if got := a.Trace(); !strings.Contains(got, "ERRO (args)") {
+		t.Fatalf("trace sem etapa de erro de argumentos:\n%s", got)
 	}
 }
 

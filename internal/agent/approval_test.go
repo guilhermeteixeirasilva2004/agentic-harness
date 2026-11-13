@@ -93,7 +93,7 @@ func TestApprovalNegaToolMutante(t *testing.T) {
 	if !strings.Contains(last, "APROVAÇÃO NEGADA (write_file)") {
 		t.Fatalf("feedback de negação ausente: %+v", f.requests[1].Messages)
 	}
-	if len(a.steps.Steps) == 0 {
+	if a.Trace() == "(trace vazio)" {
 		t.Fatal("trace vazio")
 	}
 }

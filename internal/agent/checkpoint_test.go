@@ -183,8 +183,8 @@ func TestCheckpointRestauraPlanoEEstrategia(t *testing.T) {
 	if a.strategy.Name() != "plan" {
 		t.Fatalf("estratégia = %q, esperava plan", a.strategy.Name())
 	}
-	if got := a.steps.Plan(); len(got) != 2 || got[0] != "etapa 1" {
-		t.Fatalf("plano restaurado = %#v", got)
+	if got := a.Trace(); !strings.Contains(got, "etapa 1") || !strings.Contains(got, "etapa 2") {
+		t.Fatalf("plano restaurado não aparece no trace:\n%s", got)
 	}
 	if !strings.Contains(a.Memory(), "o time usa Go") {
 		t.Fatalf("notas não restauradas:\n%s", a.Memory())
