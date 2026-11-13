@@ -241,9 +241,13 @@ Regra: `domain` não importa nada interno; `ports` importa só `domain`; `app` i
 - **T-02 🟠** Testes de segurança dedicados: *path traversal*, symlink, injeção em argv, `CheckCommand`, `remember` envenenado, aprovação em `auto` após observação não confiável.
 - **T-03 🟡** *Fuzz* (`go test -fuzz`) para `ExtractObject`, `ParseCall`, `stripFences`, `resolveWithin`, `ParseArgv`, `parseDecision`.
 - **T-04 🟡** Testes acoplados a campos privados (`a.history`, `a.notes`, `a.steps`) quebrarão na refatoração. Migrar para testes de **comportamento** via portas/eventos antes de quebrar o `Agent`.
+  - [x] primeira leva — `internal/agent/behavior_test.go` (pacote `agent_test`, só API pública) congela: fallback de JSON inválido, `ERRO (args)` sem executar a tool, aprovação negada/erro sem executar, tool fora da allowlist, checkpoint + `/continue`, `ResumeTask` sem checkpoint, fallback do streaming, formato de `History`/`Sessions`/`ShowSession`, `trimHistory` virando resumo e notas de memória no contexto.
+  - [ ] pendente — os três testes white-box restantes (`agent_test.go` em `a.history`; `approval_test.go`/`args_test.go` em `a.steps.Steps`) migram junto com cada extração (passo 2 do refactor).
 - **T-05 🟡** Testes de contrato das portas (mesma suíte rodando contra fake e adapter real): `Repository`, `LLM`.
 - **T-06 🟡** Lacunas: `ListDir`, `GetTime`, eviction de `Jobs`, `Meter` com retentativas, `nexus.sh`/`install.sh` (shellcheck no CI).
 - **T-07 🟡** **Suíte de evals** (`internal/evals`): tarefas com critério automático (ler arquivo e responder, editar e rodar teste, recusar ação perigosa), executáveis contra o modelo real (tag `-tags=eval`). Base para comparar modelos 3B/7B e *fine-tuning*.
+  - [x] infraestrutura — `internal/evals` (catálogo de 12 tarefas, graders, runner NDJSON) + `cmd/evals` atrás de `-tags=eval`; graders exercitados com caso positivo e negativo no CI (`TestGradersAprovamEReprovam`) e integração com o agente real via `FakeLLM` (`internal/agent/evals_test.go`). Documentação em `docs/evals.md`.
+  - [ ] pendente — rodar uma vez com o `llama-server` no ar e versionar `docs/evals/baseline.ndjson` (exige modelo; não roda nesta máquina).
 - **T-08 🟢** Teste de carga/concorrência após A-06 (`-race` com várias sessões).
 
 ---

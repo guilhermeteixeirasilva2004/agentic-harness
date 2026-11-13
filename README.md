@@ -548,6 +548,7 @@ install.sh               compila e instala o comando `nexus` no PATH
 nexus.sh                 atalho para conversar com o agente (persona "Nexus")
 main.go                  entrada, subcomandos e sinais
 cmd/specbench            benchmark de especulativa (matriz + aceitação)
+cmd/evals                linha de base de evals do agente (tag `eval`)
 internal/config          configuração (flags + env)
 internal/llm             cliente OpenAI-compatível: streaming, Complete e Embed
 internal/cognition       trace estruturado do raciocínio (passos + orçamento)
@@ -555,13 +556,15 @@ internal/reasoning       estratégias react/cot/plan e schemas de decisão
 internal/agent           loop ReAct com tool calling orquestrado em Go
                          (memória, RAG leve, retentativas, ask_user,
                           streaming do final e checkpoint para -continue)
+internal/evals           catálogo de 12 tarefas, graders e runner NDJSON
 internal/tools           contrato Tool, registry, allowlist e tools embutidas
 internal/safety          guardrails (limites, allowlist, teto de passos)
 internal/observ          métricas de execução (latência, tokens, tools)
 internal/store           persistência NDJSON append-only de sessões
 internal/specbench       ciclo de vida do llama-server + métricas
 internal/ui              REPL de terminal (aprovação no terminal) + engine de chat
-scripts/                 build CUDA, subir servidor e benchmark
+docs/                    mapa de dependências e documentação da linha de base
+scripts/                 build CUDA, subir servidor, benchmark e mapa de imports
 ```
 
 ## Testes
@@ -578,3 +581,23 @@ retentativa sobre HTTP (`503` e depois `200`) e a resposta final em streaming
 (SSE). Há também testes de checkpoint/`-continue`, em que um segundo agente
 restaura o estado salvo pelo primeiro. Nenhum processo externo (Python ou
 modelo) é necessário.
+
+### Linha de base de evals (`-tags=eval`)
+
+`internal/evals` define 12 tarefas com critério automático (ler/listar/editar
+arquivos, `run_shell` seguro, recusar `rm -rf`, aprovação negada, memória,
+`ask_user` e `/continue`). Os graders e o runner rodam no CI **sem** modelo; o
+comando que fala com o modelo real fica atrás da tag `eval`:
+
+```bash
+go run -tags=eval ./cmd/evals -list                  # tarefas e critérios
+go run -tags=eval ./cmd/evals -url http://127.0.0.1:8080/v1 -model local
+go run -tags=eval ./cmd/evals -tasks ler_arquivo,get_time -out /tmp/base.ndjson
+```
+
+Cada execução grava um NDJSON (uma linha por tarefa) com `id`, `tarefa`,
+`modelo`, `data`, `criterio`, `pass`, `obs` e `duracao_ms`. O arquivo versionado
+em `docs/evals/baseline.ndjson` é o snapshot de referência: rode antes e depois
+de cada extração do refactor e compare o campo `pass`. Se a máquina não tiver
+`llama-server` no ar, as 12 tarefas falham com erro de conexão — é esperado e
+não deve ser confundido com regressão do harness.

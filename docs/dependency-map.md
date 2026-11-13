@@ -1,9 +1,10 @@
 # Mapa de dependências internas
 
-Fotografia das arestas de import **entre pacotes do próprio módulo** em
-`71b0034`. É o artefato do passo 1 do refactor (A-01/A-03/A-04) e a referência
-para o teste automatizado da regra de dependência. Imports de stdlib ficam de
-fora de propósito: a regra que nos interessa é "core não conhece adapter".
+Fotografia das arestas de import **entre pacotes do próprio módulo** no fim da
+Fase A (base `71b0034` + suíte de evals). É o artefato do passo 1 do refactor
+(A-01/A-03/A-04) e a referência para o teste automatizado da regra de
+dependência. Imports de stdlib ficam de fora de propósito: a regra que nos
+interessa é "core não conhece adapter".
 
 Regenerar depois de criar, mover ou remover um pacote:
 
@@ -11,6 +12,10 @@ Regenerar depois de criar, mover ou remover um pacote:
 scripts/depmap.sh          # origem -> destino, ordenado
 scripts/depmap.sh --dot    # mesmo grafo em Graphviz
 ```
+
+Pacotes atrás de build tag não entram no mapa padrão. `internal/evals` aparece
+mesmo assim porque **não importa nenhum pacote interno** (é catálogo puro); para
+incluir `cmd/evals` (tag `eval`), rode `GOFLAGS=-tags=eval scripts/depmap.sh`.
 
 ## Arestas atuais
 
@@ -40,6 +45,17 @@ scripts/depmap.sh --dot    # mesmo grafo em Graphviz
 ./internal/ui -> ./internal/llm
 ```
 
+Com a tag `eval`, soma-se o composition root do runner (mantido fora do mapa
+padrão para não depender de build tag):
+
+```text
+./cmd/evals -> ./internal/agent
+./cmd/evals -> ./internal/config
+./cmd/evals -> ./internal/evals
+./cmd/evals -> ./internal/llm
+./cmd/evals -> ./internal/store
+```
+
 ## Tamanho dos pacotes (linhas de `.go`, sem testes separados)
 
 | Pacote | Linhas | Papel atual |
@@ -51,10 +67,12 @@ scripts/depmap.sh --dot    # mesmo grafo em Graphviz
 | `internal/testutil` | 607 | fakes de teste |
 | `internal/config` | 443 | flags e variáveis `HARNESS_*` |
 | `internal/specbench` | 430 | harness de benchmark |
+| `internal/evals` | 581 | catálogo de 12 tarefas, graders e runner NDJSON (zero imports internos) |
 | `internal/cognition` | 350 | trace de passos |
 | `internal/observ` | 288 | métricas |
 | `internal/store` | 277 | NDJSON append-only |
 | `internal/reasoning` | 277 | estratégias react/cot/plan |
+| `cmd/evals` | 228 | composition root do runner de evals (tag `eval`) |
 | `internal/safety` | 153 | política de passos/allowlist/truncamento |
 | `internal/textutil` | 129 | corte de UTF-8 |
 
